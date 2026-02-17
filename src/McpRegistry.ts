@@ -31,21 +31,11 @@ export class McpRegistry {
         await Promise.race([connectPromise, timeoutPromise]);
         this.clients.set(name, client);
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        console.error(`[MCP] Failed to connect to ${name}: ${errorMessage}`);
+        // Error will be captured in results, handled by caller
       }
     });
 
-    const results = await Promise.allSettled(connectPromises);
-    const failures = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
-
-    if (failures.length > 0) {
-      const errorMessages = failures.map((f) => f.reason);
-      console.error(`[MCP] ${failures.length}/${this.serverConfigs.length} servers failed:`, errorMessages);
-    }
-
-    const successes = results.filter((r) => r.status === "fulfilled") as PromiseFulfilledResult<void>[];
-    console.log(`[MCP] ${successes.length}/${this.serverConfigs.length} servers connected successfully`);
+    await Promise.allSettled(connectPromises);
   }
 
   getClients(): Map<string, McpClient> {
@@ -60,12 +50,8 @@ export class McpRegistry {
     this.reconnectTimers.forEach((timer) => clearTimeout(timer));
     this.reconnectTimers.clear();
 
-    const disconnectPromises = Array.from(this.clients.entries()).map(async ([name, client]) => {
-      try {
-        await client.disconnect();
-      } catch (error) {
-        console.error(`Failed to disconnect ${name}:`, error);
-      }
+    const disconnectPromises = Array.from(this.clients.entries()).map(async ([_, client]) => {
+      await client.disconnect().catch(() => {});
     });
 
     await Promise.all(disconnectPromises);

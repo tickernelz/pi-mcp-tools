@@ -89,9 +89,6 @@ export class McpClient {
         this.connected = true;
         return;
       } catch (error: any) {
-        if (error.message?.includes("timeout")) {
-          console.log(`[MCP] Transport ${type} timeout, trying next...`);
-        }
         await this.client.close().catch(() => {});
       }
     }
