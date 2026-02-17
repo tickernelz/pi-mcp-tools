@@ -7,15 +7,17 @@ import { Type } from "@sinclair/typebox";
 
 let registry: McpRegistry | null = null;
 let mcpConfig: McpConfig | null = null;
+let enabledServers: Array<{ name: string; config: import("./types.js").McpServerConfig }> = [];
+let initError: string | null = null;
+let initStats: { servers: number; tools: number; failed: string[] } | null = null;
 
-export default function (pi: ExtensionAPI) {
+export default async function (pi: ExtensionAPI) {
   mcpConfig = ConfigLoader.loadFromSettingsJson();
 
   if (!mcpConfig) {
     pi.on("session_start", async (_event, ctx) => {
       ctx.ui.notify("MCP: No configuration found in settings.json", "info");
     });
-
     pi.registerCommand("mcp-status", {
       description: "Show MCP connection status",
       handler: async (_args, ctx) => {
@@ -33,7 +35,7 @@ export default function (pi: ExtensionAPI) {
     return;
   }
 
-  const enabledServers = ConfigLoader.getEnabledServers(mcpConfig);
+  enabledServers = ConfigLoader.getEnabledServers(mcpConfig);
 
   if (enabledServers.length === 0) {
     pi.on("session_start", async (_event, ctx) => {
@@ -50,70 +52,65 @@ export default function (pi: ExtensionAPI) {
 
   const isDebugEnabled = () => pi.getFlag("mcp-debug") === true;
 
-  pi.on("session_start", async (_event, ctx) => {
-    registry = new McpRegistry(enabledServers);
+  registry = new McpRegistry(enabledServers);
 
-    ctx.ui.setStatus("mcp", "Connecting...");
-    ctx.ui.notify(`MCP: Connecting to ${enabledServers.length} servers...`, "info");
+  const initTimeout = new Promise<void>((_, reject) =>
+    setTimeout(() => reject(new Error("Connection timeout (>30s)")), 30000),
+  );
 
-    try {
-      const initTimeout = setTimeout(() => {
-        ctx.ui.notify("MCP: Connection timeout (>30s)", "warning");
-      }, 30000);
+  try {
+    await Promise.race([registry.initialize(), initTimeout]);
 
-      await registry.initialize();
-      clearTimeout(initTimeout);
+    const clients = registry.getClients();
+    let totalTools = 0;
+    const failedServers: string[] = [];
 
-      const clients = registry.getClients();
-      let totalTools = 0;
-      const registeredTools: string[] = [];
-      const failedServers: string[] = [];
+    for (const [serverName, client] of clients) {
+      const serverConfig = enabledServers.find((s) => s.name === serverName);
+      if (!serverConfig) continue;
 
-      for (const [serverName, client] of clients) {
-        const serverConfig = enabledServers.find((s) => s.name === serverName);
-        if (!serverConfig) continue;
+      try {
+        const tools = await client.listTools();
+        const toolPrefix = serverConfig.config.toolPrefix;
+        const filterPatterns = serverConfig.config.filterPatterns;
 
-        try {
-          const tools = await client.listTools();
-          const toolPrefix = serverConfig.config.toolPrefix;
-          const filterPatterns = serverConfig.config.filterPatterns;
-
-          for (const tool of tools) {
-            const piTool = McpToolAdapter.convertToPiTool(tool, serverName, client, toolPrefix, filterPatterns);
-            if (piTool) {
-              pi.registerTool(piTool);
-              registeredTools.push(piTool.name);
-              totalTools++;
-            }
-          }
-
-          if (isDebugEnabled()) {
-            ctx.ui.notify(`MCP: ${serverName} - ${tools.length} tools`, "info");
-          }
-        } catch (err: unknown) {
-          const errMsg = err instanceof Error ? err.message : "Unknown error";
-          failedServers.push(`${serverName}: ${errMsg}`);
-          if (isDebugEnabled()) {
-            ctx.ui.notify(`MCP: ${serverName} failed - ${errMsg}`, "error");
+        for (const tool of tools) {
+          const piTool = McpToolAdapter.convertToPiTool(tool, serverName, client, toolPrefix, filterPatterns);
+          if (piTool) {
+            pi.registerTool(piTool);
+            totalTools++;
           }
         }
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : "Unknown error";
+        failedServers.push(`${serverName}: ${errMsg}`);
       }
+    }
 
-      const connectedCount = registry.getConnectedCount();
-      const statusMsg = `MCP: ${connectedCount}/${enabledServers.length} servers, ${totalTools} tools`;
-      ctx.ui.setStatus("mcp", statusMsg);
+    initStats = { servers: clients.size, tools: totalTools, failed: failedServers };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    initError = errorMessage;
+  }
 
-      if (failedServers.length > 0) {
-        ctx.ui.notify(`MCP: ${failedServers.length} server(s) failed:\n${failedServers.join("\n")}`, "warning");
-      }
+  pi.on("session_start", async (_event, ctx) => {
+    const connectedCount = registry?.getConnectedCount() ?? 0;
+    const toolCount = initStats?.tools ?? 0;
 
+    if (initError) {
+      ctx.ui.setStatus("mcp", `Error: ${initError}`);
       if (isDebugEnabled()) {
-        ctx.ui.notify(`MCP: ${registeredTools.length} tools registered`, "info");
+        ctx.ui.notify(`MCP init failed: ${initError}`, "error");
       }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      ctx.ui.setStatus("mcp", `Error: ${errorMessage}`);
-      ctx.ui.notify(`MCP connection failed: ${errorMessage}`, "error");
+    } else {
+      ctx.ui.setStatus("mcp", `MCP: ${connectedCount}/${enabledServers.length} servers, ${toolCount} tools`);
+
+      if (isDebugEnabled() && initStats) {
+        ctx.ui.notify(`MCP: ${initStats.servers} servers, ${initStats.tools} tools loaded`, "info");
+        if (initStats.failed.length > 0) {
+          ctx.ui.notify(`Failed: ${initStats.failed.join(", ")}`, "warning");
+        }
+      }
     }
   });
 
@@ -131,13 +128,10 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.notify("MCP: Not initialized", "warning");
         return;
       }
-
       ctx.ui.setStatus("mcp", "Checking...");
-
       try {
         const clients = registry.getClients();
         const status: string[] = [];
-
         for (const [name, client] of clients) {
           try {
             await client.listTools();
@@ -146,7 +140,6 @@ export default function (pi: ExtensionAPI) {
             status.push(`✗ ${name}`);
           }
         }
-
         ctx.ui.setStatus("mcp", `Status: ${clients.size} servers`);
         ctx.ui.notify(`MCP Status:\n${status.join("\n")}`, "info");
       } catch (error: unknown) {
@@ -163,15 +156,12 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.notify("MCP: Not initialized", "warning");
         return;
       }
-
       ctx.ui.setStatus("mcp", "Reconnecting...");
-
       try {
         await registry.shutdown();
         const enabledServers = ConfigLoader.getEnabledServers(mcpConfig);
         registry = new McpRegistry(enabledServers);
         await registry.initialize();
-
         const connectedCount = registry.getConnectedCount();
         ctx.ui.setStatus("mcp", `MCP: ${connectedCount} servers`);
         ctx.ui.notify(`MCP reconnected: ${connectedCount} servers`, "info");
@@ -190,21 +180,17 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.notify("MCP: Not initialized", "warning");
         return;
       }
-
       const serverName = args?.trim();
       if (!serverName) {
         ctx.ui.notify("Usage: /mcp-toggle <server-name>", "warning");
         return;
       }
-
       const clients = registry.getClients();
       const client = clients.get(serverName);
-
       if (!client) {
         ctx.ui.notify(`Server '${serverName}' not found`, "error");
         return;
       }
-
       try {
         if (client.isConnected()) {
           await client.disconnect();
@@ -229,10 +215,8 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.notify("MCP: Not initialized", "warning");
         return;
       }
-
       const clients = registry.getClients();
       const toolList: string[] = [];
-
       for (const [serverName, client] of clients) {
         try {
           const tools = await client.listTools();
@@ -244,7 +228,6 @@ export default function (pi: ExtensionAPI) {
           toolList.push(`\n${serverName}: [unable to list tools]`);
         }
       }
-
       ctx.ui.notify(`MCP Tools:${toolList.join("\n")}`, "info");
     },
   });
@@ -256,23 +239,14 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate) {
       if (!registry) {
-        return {
-          content: [{ type: "text", text: "MCP not initialized" }],
-          details: { initialized: false },
-        };
+        return { content: [{ type: "text", text: "MCP not initialized" }], details: { initialized: false } };
       }
-
       const clients = registry.getClients();
       const servers: Array<{ name: string; connected: boolean }> = [];
-
       for (const [name, client] of clients) {
         servers.push({ name, connected: client.isConnected() });
       }
-
-      return {
-        content: [{ type: "text", text: JSON.stringify(servers, null, 2) }],
-        details: { servers },
-      };
+      return { content: [{ type: "text", text: JSON.stringify(servers, null, 2) }], details: { servers } };
     },
   });
 }
