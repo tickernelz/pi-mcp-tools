@@ -1,5 +1,9 @@
 # @zhafron/pi-mcp-tools
 
+[![npm version](https://img.shields.io/npm/v/@zhafron/pi-mcp-tools)](https://www.npmjs.com/package/@zhafron/pi-mcp-tools)
+[![npm downloads](https://img.shields.io/npm/dm/@zhafron/pi-mcp-tools)](https://www.npmjs.com/package/@zhafron/pi-mcp-tools)
+[![license](https://img.shields.io/npm/l/@zhafron/pi-mcp-tools)](https://www.npmjs.com/package/@zhafron/pi-mcp-tools)
+
 Universal MCP (Model Context Protocol) tools extension for pi coding agent.
 
 ## Install
