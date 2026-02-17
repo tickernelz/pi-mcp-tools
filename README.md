@@ -2,24 +2,23 @@
 
 Universal MCP (Model Context Protocol) tools extension for pi coding agent.
 
-## Installation
+## Install
+
+```bash
+pi install git:github.com/tickernelz/pi-mcp-tools
+```
+
+Or manually:
 
 ```bash
 cd ~/.pi/agent/extensions
-git clone <repository-url> pi-mcp-tools
-cd pi-mcp-tools
-npm install
+git clone https://github.com/tickernelz/pi-mcp-tools.git
+cd pi-mcp-tools && npm install
 ```
 
-Or install as a pi package:
+## Quick Start
 
-```bash
-pi install git:github.com/yourusername/pi-mcp-tools
-```
-
-## Configuration
-
-Add MCP server configuration to `~/.pi/agent/settings.json` or `.pi/settings.json`:
+Add to `~/.pi/agent/settings.json`:
 
 ```json
 {
@@ -29,203 +28,107 @@ Add MCP server configuration to `~/.pi/agent/settings.json` or `.pi/settings.jso
         "name": "filesystem",
         "type": "local",
         "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/username/Projects"],
-        "enabled": true,
-        "toolPrefix": "fs",
-        "filterPatterns": ["read.*", "write.*", "list.*"]
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/project"],
+        "enabled": true
       },
       {
         "name": "github",
         "type": "local",
         "command": "npx",
         "args": ["-y", "@modelcontextprotocol/server-github"],
-        "env": {
-          "GITHUB_TOKEN": "your-github-token"
-        },
-        "enabled": true
-      },
-      {
-        "name": "postgres",
-        "type": "local",
-        "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydb"],
-        "enabled": false
-      },
-      {
-        "name": "remote-server",
-        "type": "remote",
-        "url": "http://localhost:3000/sse",
-        "transport": "sse",
-        "headers": {
-          "Authorization": "Bearer token"
-        },
-        "enabled": true
-      },
-      {
-        "name": "websocket-server",
-        "type": "remote",
-        "url": "ws://localhost:8080/mcp",
-        "transport": "websocket",
+        "env": { "GITHUB_TOKEN": "ghp_..." },
         "enabled": true
       }
-    ],
-    "autoReconnect": true,
-    "reconnectInterval": 5000
+    ]
   }
 }
 ```
 
-## Server Configuration Options
-
-### Local Servers
+## Config Options
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `name` | string | Yes | Unique server identifier |
-| `type` | "local" | Yes | Server type |
-| `command` | string | Yes | Command to execute (e.g., `npx`, `node`) |
-| `args` | string[] | Yes | Command arguments |
-| `env` | object | No | Environment variables |
-| `cwd` | string | No | Working directory |
-| `enabled` | boolean | No | Enable/disable server (default: true) |
-| `toolPrefix` | string | No | Custom prefix for tool names (default: `mcp_{name}`) |
-| `filterPatterns` | string[] | No | Regex patterns to filter tools |
-
-### Remote Servers
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | string | Yes | Unique server identifier |
-| `type` | "remote" | Yes | Server type |
-| `url` | string | Yes | Server URL |
-| `transport` | "sse" \| "websocket" | Yes | Transport protocol |
-| `headers` | object | No | HTTP headers |
-| `enabled` | boolean | No | Enable/disable server (default: true) |
-| `toolPrefix` | string | No | Custom prefix for tool names |
-| `filterPatterns` | string[] | No | Regex patterns to filter tools |
+| `name` | string | ✓ | Server identifier |
+| `type` | `"local"` \| `"remote"` | ✓ | Server type |
+| `command` | string | local ✓ | Command (e.g., `npx`) |
+| `args` | string[] | local ✓ | Command arguments |
+| `url` | string | remote ✓ | Server URL |
+| `transport` | `"sse"` \| `"websocket"` | remote ✓ | Transport protocol |
+| `env` | object | - | Environment variables |
+| `toolPrefix` | string | - | Custom tool name prefix |
+| `filterPatterns` | string[] | - | Regex to filter tools |
+| `enabled` | boolean | - | Enable/disable (default: true) |
 
 ### Global Options
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `autoReconnect` | boolean | true | Auto-reconnect on connection loss |
-| `reconnectInterval` | number | 5000 | Reconnect interval in milliseconds |
+| `autoReconnect` | boolean | `true` | Auto-reconnect on failure |
+| `reconnectInterval` | number | `5000` | Reconnect interval (ms) |
 
-## Usage
-
-### Commands
+## Commands
 
 | Command | Description |
 |---------|-------------|
-| `/mcp-status` | Show MCP connection status |
-| `/mcp-reconnect` | Reconnect to all MCP servers |
-| `/mcp-health` | Run health check on all servers |
-| `/mcp-list` | List all available MCP tools |
+| `/mcp-status` | Show server connection status |
+| `/mcp-reconnect` | Reconnect all servers |
+| `/mcp-health` | Health check all servers |
+| `/mcp-list` | List available tools |
 
-### Flags
+**Flag:** `--mcp-debug` - Enable debug logging
 
-| Flag | Description |
-|------|-------------|
-| `--mcp-debug` | Enable debug logging |
+## Tools
 
-### Tools
+Tools auto-registered as: `mcp_{server}_{tool}` or `{toolPrefix}_{tool}`
 
-All MCP tools are automatically registered with the naming convention:
-- Default: `mcp_{serverName}_{toolName}`
-- Custom: `{toolPrefix}_{toolName}`
+Example: `fs_read_file`, `mcp_github_create_issue`
 
-Example tool names:
-- `mcp_filesystem_read_file`
-- `mcp_github_create_issue`
-- `fs_read_file` (with custom prefix)
-
-## Example MCP Servers
-
-### Filesystem
+## Popular MCP Servers
 
 ```json
-{
-  "name": "filesystem",
-  "type": "local",
-  "command": "npx",
-  "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/watch"],
-  "enabled": true
-}
-```
+// Filesystem
+{ "name": "fs", "type": "local", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path"] }
 
-### GitHub
+// GitHub
+{ "name": "github", "type": "local", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": { "GITHUB_TOKEN": "ghp_..." } }
 
-```json
-{
-  "name": "github",
-  "type": "local",
-  "command": "npx",
-  "args": ["-y", "@modelcontextprotocol/server-github"],
-  "env": {
-    "GITHUB_TOKEN": "ghp_..."
-  },
-  "enabled": true
-}
-```
+// Git
+{ "name": "git", "type": "local", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-git"] }
 
-### PostgreSQL
+// PostgreSQL
+{ "name": "db", "type": "local", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/db"] }
 
-```json
-{
-  "name": "postgres",
-  "type": "local",
-  "command": "npx",
-  "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/db"],
-  "enabled": true
-}
-```
+// Fetch/HTTP
+{ "name": "fetch", "type": "local", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-fetch"] }
 
-### Git
+// Remote (SSE)
+{ "name": "remote", "type": "remote", "url": "http://localhost:3000/sse", "transport": "sse" }
 
-```json
-{
-  "name": "git",
-  "type": "local",
-  "command": "npx",
-  "args": ["-y", "@modelcontextprotocol/server-git"],
-  "enabled": true
-}
-```
-
-### Fetch/HTTP
-
-```json
-{
-  "name": "fetch",
-  "type": "local",
-  "command": "npx",
-  "args": ["-y", "@modelcontextprotocol/server-fetch"],
-  "enabled": true
-}
+// Remote (WebSocket)
+{ "name": "ws", "type": "remote", "url": "ws://localhost:8080/mcp", "transport": "websocket" }
 ```
 
 ## Development
 
 ```bash
 npm install
-npm run build
-npm run format
-npm run lint
+npm run build       # Type check
+npm run format      # Format code
+npm run format:check
 ```
 
-## Testing
-
-Test with pi coding agent:
+## Publish
 
 ```bash
-pi -e ./src/index.ts --mcp-debug
+npm version patch  # Bump version
+git push --tags    # Trigger npm publish
 ```
 
-Or install globally and use:
+## Links
 
-```bash
-pi
-```
+- [GitHub](https://github.com/tickernelz/pi-mcp-tools)
+- [npm](https://www.npmjs.com/package/pi-mcp-tools)
+- [Report issues](https://github.com/tickernelz/pi-mcp-tools/issues)
 
 ## License
 

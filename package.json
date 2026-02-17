@@ -26,11 +26,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/pi-mcp-tools.git"
+    "url": "https://github.com/tickernelz/pi-mcp-tools.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/pi-mcp-tools/issues"
+    "url": "https://github.com/tickernelz/pi-mcp-tools/issues"
   },
+  "author": "zhafron",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@sinclair/typebox": "^0.34.0"
