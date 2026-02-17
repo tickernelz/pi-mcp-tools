@@ -1,5 +1,5 @@
 {
-  "name": "pi-mcp-tools",
+  "name": "@zhafron/pi-mcp-tools",
   "version": "1.0.0",
   "type": "module",
   "description": "Universal MCP tools extension for pi coding agent",
@@ -22,7 +22,7 @@
     "extension",
     "pi-package"
   ],
-  "author": "",
+  "author": "zhafron",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -31,7 +31,6 @@
   "bugs": {
     "url": "https://github.com/tickernelz/pi-mcp-tools/issues"
   },
-  "author": "zhafron",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@sinclair/typebox": "^0.34.0"

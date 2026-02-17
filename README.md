@@ -1,4 +1,4 @@
-# pi-mcp-tools
+# @zhafron/pi-mcp-tools
 
 Universal MCP (Model Context Protocol) tools extension for pi coding agent.
 
@@ -6,6 +6,12 @@ Universal MCP (Model Context Protocol) tools extension for pi coding agent.
 
 ```bash
 pi install git:github.com/tickernelz/pi-mcp-tools
+```
+
+Or via npm:
+
+```bash
+pi install npm:@zhafron/pi-mcp-tools
 ```
 
 Or manually:
@@ -25,18 +31,10 @@ Add to `~/.pi/agent/settings.json`:
   "mcp": {
     "servers": [
       {
-        "name": "filesystem",
+        "name": "web-search",
         "type": "local",
         "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/project"],
-        "enabled": true
-      },
-      {
-        "name": "github",
-        "type": "local",
-        "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-github"],
-        "env": { "GITHUB_TOKEN": "ghp_..." },
+        "args": ["-y", "@zhafron/mcp-web-search"],
         "enabled": true
       }
     ]
@@ -86,6 +84,9 @@ Example: `fs_read_file`, `mcp_github_create_issue`
 ## Popular MCP Servers
 
 ```json
+// Web Search (by @zhafron)
+{ "name": "web-search", "type": "local", "command": "npx", "args": ["-y", "@zhafron/mcp-web-search"] }
+
 // Filesystem
 { "name": "fs", "type": "local", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path"] }
 
@@ -98,14 +99,8 @@ Example: `fs_read_file`, `mcp_github_create_issue`
 // PostgreSQL
 { "name": "db", "type": "local", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/db"] }
 
-// Fetch/HTTP
-{ "name": "fetch", "type": "local", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-fetch"] }
-
 // Remote (SSE)
 { "name": "remote", "type": "remote", "url": "http://localhost:3000/sse", "transport": "sse" }
-
-// Remote (WebSocket)
-{ "name": "ws", "type": "remote", "url": "ws://localhost:8080/mcp", "transport": "websocket" }
 ```
 
 ## Development
