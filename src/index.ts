@@ -111,22 +111,34 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerCommand("mcp-status", {
-    description: "Show MCP connection status",
+    description: "Show MCP connection status with health check",
     handler: async (_args, ctx) => {
       if (!registry) {
         ctx.ui.notify("MCP: Not initialized", "warning");
         return;
       }
 
-      const clients = registry.getClients();
-      const status: string[] = [];
+      ctx.ui.setStatus("mcp", "Checking...");
 
-      for (const [name, client] of clients) {
-        const connected = client.isConnected() ? "✓" : "✗";
-        status.push(`${connected} ${name}`);
+      try {
+        const clients = registry.getClients();
+        const status: string[] = [];
+
+        for (const [name, client] of clients) {
+          try {
+            await client.listTools();
+            status.push(`✓ ${name}`);
+          } catch {
+            status.push(`✗ ${name}`);
+          }
+        }
+
+        ctx.ui.setStatus("mcp", `Status: ${clients.size} servers`);
+        ctx.ui.notify(`MCP Status:\n${status.join("\n")}`, "info");
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        ctx.ui.notify(`Status check failed: ${errorMessage}`, "error");
       }
-
-      ctx.ui.notify(`MCP Status:\n${status.join("\n")}`, "info");
     },
   });
 
@@ -160,29 +172,41 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  pi.registerCommand("mcp-health", {
-    description: "Run health check on all MCP servers",
-    handler: async (_args, ctx) => {
-      if (!registry) {
+  pi.registerCommand("mcp-toggle", {
+    description: "Toggle MCP server on/off",
+    handler: async (args, ctx) => {
+      if (!registry || !mcpConfig) {
         ctx.ui.notify("MCP: Not initialized", "warning");
         return;
       }
 
-      ctx.ui.setStatus("mcp", "Health check...");
+      const serverName = args?.trim();
+      if (!serverName) {
+        ctx.ui.notify("Usage: /mcp-toggle <server-name>", "warning");
+        return;
+      }
+
+      const clients = registry.getClients();
+      const client = clients.get(serverName);
+
+      if (!client) {
+        ctx.ui.notify(`Server '${serverName}' not found`, "error");
+        return;
+      }
 
       try {
-        const results = await registry.healthCheck();
-        const status: string[] = [];
-
-        for (const [name, healthy] of results) {
-          status.push(`${healthy ? "✓" : "✗"} ${name}`);
+        if (client.isConnected()) {
+          await client.disconnect();
+          ctx.ui.setStatus("mcp", `${serverName}: off`);
+          ctx.ui.notify(`Server '${serverName}' disconnected`, "info");
+        } else {
+          await client.reconnect();
+          ctx.ui.setStatus("mcp", `${serverName}: on`);
+          ctx.ui.notify(`Server '${serverName}' connected`, "info");
         }
-
-        ctx.ui.setStatus("mcp", `Health: ${results.size} checked`);
-        ctx.ui.notify(`MCP Health Check:\n${status.join("\n")}`, "info");
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        ctx.ui.notify(`Health check failed: ${errorMessage}`, "error");
+        ctx.ui.notify(`Toggle failed: ${errorMessage}`, "error");
       }
     },
   });
