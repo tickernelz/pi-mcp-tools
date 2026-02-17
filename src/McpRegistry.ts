@@ -20,12 +20,13 @@ export class McpRegistry {
 
   async initialize(): Promise<void> {
     const connectPromises = this.serverConfigs.map(async ({ name, config }) => {
+      const client = new McpClient(config);
       try {
-        const client = new McpClient(config);
         await client.connect();
         this.clients.set(name, client);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        console.error(`[MCP] Failed to connect to ${name}: ${errorMessage}`);
         throw new Error(`Failed to connect to MCP server ${name}: ${errorMessage}`);
       }
     });
@@ -34,8 +35,12 @@ export class McpRegistry {
     const failures = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
 
     if (failures.length > 0) {
-      failures.forEach((f) => console.error(f.reason));
+      const errorMessages = failures.map((f) => f.reason);
+      console.error(`[MCP] ${failures.length}/${this.serverConfigs.length} servers failed:`, errorMessages);
     }
+
+    const successes = results.filter((r) => r.status === "fulfilled") as PromiseFulfilledResult<void>[];
+    console.log(`[MCP] ${successes.length}/${this.serverConfigs.length} servers connected successfully`);
   }
 
   getClients(): Map<string, McpClient> {

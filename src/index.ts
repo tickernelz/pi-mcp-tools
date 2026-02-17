@@ -54,44 +54,61 @@ export default function (pi: ExtensionAPI) {
     registry = new McpRegistry(enabledServers);
 
     ctx.ui.setStatus("mcp", "Connecting...");
+    ctx.ui.notify(`MCP: Connecting to ${enabledServers.length} servers...`, "info");
 
     try {
+      const initTimeout = setTimeout(() => {
+        ctx.ui.notify("MCP: Connection timeout (>30s)", "warning");
+      }, 30000);
+
       await registry.initialize();
+      clearTimeout(initTimeout);
 
       const clients = registry.getClients();
       let totalTools = 0;
       const registeredTools: string[] = [];
+      const failedServers: string[] = [];
 
       for (const [serverName, client] of clients) {
         const serverConfig = enabledServers.find((s) => s.name === serverName);
         if (!serverConfig) continue;
 
-        const tools = await client.listTools();
-        const toolPrefix = serverConfig.config.toolPrefix;
-        const filterPatterns = serverConfig.config.filterPatterns;
+        try {
+          const tools = await client.listTools();
+          const toolPrefix = serverConfig.config.toolPrefix;
+          const filterPatterns = serverConfig.config.filterPatterns;
 
-        for (const tool of tools) {
-          const piTool = McpToolAdapter.convertToPiTool(tool, serverName, client, toolPrefix, filterPatterns);
-          if (piTool) {
-            pi.registerTool(piTool);
-            registeredTools.push(piTool.name);
-            totalTools++;
+          for (const tool of tools) {
+            const piTool = McpToolAdapter.convertToPiTool(tool, serverName, client, toolPrefix, filterPatterns);
+            if (piTool) {
+              pi.registerTool(piTool);
+              registeredTools.push(piTool.name);
+              totalTools++;
+            }
           }
-        }
 
-        if (isDebugEnabled()) {
-          ctx.ui.notify(`MCP: ${serverName} - ${tools.length} tools available`, "info");
+          if (isDebugEnabled()) {
+            ctx.ui.notify(`MCP: ${serverName} - ${tools.length} tools`, "info");
+          }
+        } catch (err: unknown) {
+          const errMsg = err instanceof Error ? err.message : "Unknown error";
+          failedServers.push(`${serverName}: ${errMsg}`);
+          if (isDebugEnabled()) {
+            ctx.ui.notify(`MCP: ${serverName} failed - ${errMsg}`, "error");
+          }
         }
       }
 
       const connectedCount = registry.getConnectedCount();
-      ctx.ui.setStatus("mcp", `MCP: ${connectedCount}/${enabledServers.length} servers, ${totalTools} tools`);
+      const statusMsg = `MCP: ${connectedCount}/${enabledServers.length} servers, ${totalTools} tools`;
+      ctx.ui.setStatus("mcp", statusMsg);
+
+      if (failedServers.length > 0) {
+        ctx.ui.notify(`MCP: ${failedServers.length} server(s) failed:\n${failedServers.join("\n")}`, "warning");
+      }
 
       if (isDebugEnabled()) {
-        ctx.ui.notify(`MCP connected: ${registeredTools.length} tools registered`, "info");
-        if (isDebugEnabled()) {
-          ctx.ui.notify(`Tools: ${registeredTools.join(", ")}`, "info");
-        }
+        ctx.ui.notify(`MCP: ${registeredTools.length} tools registered`, "info");
       }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
