@@ -1,0 +1,40 @@
+{
+  "name": "pi-mcp-tools",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Universal MCP tools extension for pi coding agent",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "lint": "eslint \"src/**/*.ts\"",
+    "prepare": "husky"
+  },
+  "keywords": [
+    "pi",
+    "coding-agent",
+    "mcp",
+    "extension"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@sinclair/typebox": "^0.34.0"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "husky": "^9.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.0.0"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}
