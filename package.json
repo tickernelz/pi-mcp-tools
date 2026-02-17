@@ -4,6 +4,10 @@
   "type": "module",
   "description": "Universal MCP tools extension for pi coding agent",
   "main": "src/index.ts",
+  "files": [
+    "src",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.ts\"",
@@ -15,10 +19,18 @@
     "pi",
     "coding-agent",
     "mcp",
-    "extension"
+    "extension",
+    "pi-package"
   ],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/pi-mcp-tools.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/pi-mcp-tools/issues"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@sinclair/typebox": "^0.34.0"
