@@ -68,9 +68,9 @@ Add to `~/.pi/agent/settings.json`:
 
 | Command | Description |
 |---------|-------------|
-| `/mcp-status` | Show server connection status |
+| `/mcp-status` | Show server status with health check |
 | `/mcp-reconnect` | Reconnect all servers |
-| `/mcp-health` | Health check all servers |
+| `/mcp-toggle <server>` | Toggle server on/off |
 | `/mcp-list` | List available tools |
 
 **Flag:** `--mcp-debug` - Enable debug logging
