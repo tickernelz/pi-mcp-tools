@@ -18,14 +18,6 @@ Or via npm:
 pi install npm:@zhafron/pi-mcp-tools
 ```
 
-Or manually:
-
-```bash
-cd ~/.pi/agent/extensions
-git clone https://github.com/tickernelz/pi-mcp-tools.git
-cd pi-mcp-tools && npm install
-```
-
 ## Quick Start
 
 Add to `~/.pi/agent/settings.json`:
@@ -33,40 +25,83 @@ Add to `~/.pi/agent/settings.json`:
 ```json
 {
   "mcp": {
-    "servers": [
-      {
-        "name": "web-search",
-        "type": "local",
-        "command": "npx",
-        "args": ["-y", "@zhafron/mcp-web-search"],
-        "enabled": true
-      }
-    ]
+    "web-search": {
+      "type": "local",
+      "command": ["npx", "-y", "@zhafron/mcp-web-search"]
+    },
+    "context7": {
+      "type": "local",
+      "command": ["npx", "-y", "@upstash/context7-mcp", "--api-key", "your-api-key"]
+    },
+    "deepwiki": {
+      "type": "remote",
+      "url": "https://mcp.deepwiki.com/mcp"
+    },
+    "filesystem": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/path/to/project"],
+      "enabled": true
+    }
   }
 }
 ```
 
-## Config Options
+## Config Format
+
+Each MCP server is a key under `"mcp"` with the following structure:
+
+### Local Servers
+
+```json
+{
+  "server-name": {
+    "type": "local",
+    "command": ["npx", "-y", "package-name", "args..."],
+    "env": { "KEY": "value" },
+    "cwd": "/path/to/workdir",
+    "enabled": true,
+    "toolPrefix": "prefix",
+    "filterPatterns": ["pattern1", "pattern2"]
+  }
+}
+```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `name` | string | ✓ | Server identifier |
-| `type` | `"local"` \| `"remote"` | ✓ | Server type |
-| `command` | string | local ✓ | Command (e.g., `npx`) |
-| `args` | string[] | local ✓ | Command arguments |
-| `url` | string | remote ✓ | Server URL |
-| `transport` | `"sse"` \| `"websocket"` | remote ✓ | Transport protocol |
-| `env` | object | - | Environment variables |
-| `toolPrefix` | string | - | Custom tool name prefix |
-| `filterPatterns` | string[] | - | Regex to filter tools |
-| `enabled` | boolean | - | Enable/disable (default: true) |
+| `type` | `"local"` | ✓ | Server type |
+| `command` | `string[]` | ✓ | Command and args as array |
+| `env` | `object` | - | Environment variables |
+| `cwd` | `string` | - | Working directory |
+| `enabled` | `boolean` | - | Enable/disable (default: true) |
+| `toolPrefix` | `string` | - | Custom tool name prefix |
+| `filterPatterns` | `string[]` | - | Regex to filter tools |
 
-### Global Options
+### Remote Servers
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `autoReconnect` | boolean | `true` | Auto-reconnect on failure |
-| `reconnectInterval` | number | `5000` | Reconnect interval (ms) |
+```json
+{
+  "server-name": {
+    "type": "remote",
+    "url": "https://example.com/mcp",
+    "headers": { "Authorization": "Bearer token" },
+    "enabled": true,
+    "toolPrefix": "prefix"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | `"remote"` | ✓ | Server type |
+| `url` | `string` | ✓ | MCP server URL (auto-detects transport) |
+| `headers` | `object` | - | HTTP headers |
+| `enabled` | `boolean` | - | Enable/disable (default: true) |
+| `toolPrefix` | `string` | - | Custom tool name prefix |
+
+**Transport auto-detection:**
+- WebSocket: `ws://`, `wss://`, or URL contains "websocket"
+- StreamableHTTP: MCP protocol 2025-xx (newest standard)
+- SSE: Legacy servers or fallback
 
 ## Commands
 
@@ -83,28 +118,74 @@ Add to `~/.pi/agent/settings.json`:
 
 Tools auto-registered as: `mcp_{server}_{tool}` or `{toolPrefix}_{tool}`
 
-Example: `fs_read_file`, `mcp_github_create_issue`
+Example: `mcp_web-search_search`, `ctx7_read_docs`
 
-## Popular MCP Servers
+## Examples
+
+### Multiple Providers
 
 ```json
-// Web Search (by @zhafron)
-{ "name": "web-search", "type": "local", "command": "npx", "args": ["-y", "@zhafron/mcp-web-search"] }
+{
+  "mcp": {
+    "context7": {
+      "type": "local",
+      "command": ["npx", "-y", "@upstash/context7-mcp", "--api-key", "ctx7sk-..."]
+    },
+    "deepwiki": {
+      "type": "remote",
+      "url": "https://mcp.deepwiki.com/mcp"
+    },
+    "chrome-devtools": {
+      "type": "local",
+      "command": ["npx", "-y", "chrome-devtools-mcp@latest"]
+    },
+    "web-search": {
+      "type": "local",
+      "command": ["npx", "-y", "@zhafron/mcp-web-search"]
+    },
+    "octocode": {
+      "type": "local",
+      "command": ["npx", "octocode-mcp@latest"]
+    }
+  }
+}
+```
 
-// Filesystem
-{ "name": "fs", "type": "local", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path"] }
+### With Environment Variables
 
-// GitHub
-{ "name": "github", "type": "local", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": { "GITHUB_TOKEN": "ghp_..." } }
+```json
+{
+  "mcp": {
+    "github": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_TOKEN": "ghp_..." }
+    },
+    "postgres": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/db"]
+    }
+  }
+}
+```
 
-// Git
-{ "name": "git", "type": "local", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-git"] }
+### Disable Server Temporarily
 
-// PostgreSQL
-{ "name": "db", "type": "local", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/db"] }
-
-// Remote (SSE)
-{ "name": "remote", "type": "remote", "url": "http://localhost:3000/sse", "transport": "sse" }
+```json
+{
+  "mcp": {
+    "web-search": {
+      "type": "local",
+      "command": ["npx", "-y", "@zhafron/mcp-web-search"],
+      "enabled": true
+    },
+    "context7": {
+      "type": "local",
+      "command": ["npx", "-y", "@upstash/context7-mcp"],
+      "enabled": false
+    }
+  }
+}
 ```
 
 ## Development
@@ -126,7 +207,7 @@ git push --tags    # Trigger npm publish
 ## Links
 
 - [GitHub](https://github.com/tickernelz/pi-mcp-tools)
-- [npm](https://www.npmjs.com/package/pi-mcp-tools)
+- [npm](https://www.npmjs.com/package/@zhafron/pi-mcp-tools)
 - [Report issues](https://github.com/tickernelz/pi-mcp-tools/issues)
 
 ## License

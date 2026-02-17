@@ -51,10 +51,7 @@ export default function (pi: ExtensionAPI) {
   const isDebugEnabled = () => pi.getFlag("mcp-debug") === true;
 
   pi.on("session_start", async (_event, ctx) => {
-    const autoReconnect = mcpConfig?.autoReconnect ?? true;
-    const reconnectInterval = mcpConfig?.reconnectInterval ?? 5000;
-
-    registry = new McpRegistry(enabledServers, autoReconnect, reconnectInterval);
+    registry = new McpRegistry(enabledServers);
 
     ctx.ui.setStatus("mcp", "Connecting...");
 
@@ -70,8 +67,8 @@ export default function (pi: ExtensionAPI) {
         if (!serverConfig) continue;
 
         const tools = await client.listTools();
-        const toolPrefix = serverConfig.toolPrefix;
-        const filterPatterns = serverConfig.filterPatterns;
+        const toolPrefix = serverConfig.config.toolPrefix;
+        const filterPatterns = serverConfig.config.filterPatterns;
 
         for (const tool of tools) {
           const piTool = McpToolAdapter.convertToPiTool(tool, serverName, client, toolPrefix, filterPatterns);
@@ -111,7 +108,7 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerCommand("mcp-status", {
-    description: "Show MCP connection status with health check",
+    description: "Show MCP server status with health check",
     handler: async (_args, ctx) => {
       if (!registry) {
         ctx.ui.notify("MCP: Not initialized", "warning");
@@ -154,11 +151,8 @@ export default function (pi: ExtensionAPI) {
 
       try {
         await registry.shutdown();
-        registry = new McpRegistry(
-          ConfigLoader.getEnabledServers(mcpConfig),
-          mcpConfig.autoReconnect ?? true,
-          mcpConfig.reconnectInterval ?? 5000,
-        );
+        const enabledServers = ConfigLoader.getEnabledServers(mcpConfig);
+        registry = new McpRegistry(enabledServers);
         await registry.initialize();
 
         const connectedCount = registry.getConnectedCount();

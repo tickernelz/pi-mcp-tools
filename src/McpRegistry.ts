@@ -3,26 +3,30 @@ import { McpClient } from "./McpClient.js";
 
 export class McpRegistry {
   private clients: Map<string, McpClient> = new Map();
-  private configs: McpServerConfig[];
+  private serverConfigs: Array<{ name: string; config: McpServerConfig }>;
   private reconnectTimers: Map<string, NodeJS.Timeout> = new Map();
   private autoReconnect: boolean;
   private reconnectInterval: number;
 
-  constructor(configs: McpServerConfig[], autoReconnect: boolean = true, reconnectInterval: number = 5000) {
-    this.configs = configs.filter((c) => c.enabled);
+  constructor(
+    serverConfigs: Array<{ name: string; config: McpServerConfig }>,
+    autoReconnect: boolean = true,
+    reconnectInterval: number = 5000,
+  ) {
+    this.serverConfigs = serverConfigs.filter((s) => s.config.enabled !== false);
     this.autoReconnect = autoReconnect;
     this.reconnectInterval = reconnectInterval;
   }
 
   async initialize(): Promise<void> {
-    const connectPromises = this.configs.map(async (config) => {
+    const connectPromises = this.serverConfigs.map(async ({ name, config }) => {
       try {
         const client = new McpClient(config);
         await client.connect();
-        this.clients.set(config.name, client);
+        this.clients.set(name, client);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        throw new Error(`Failed to connect to MCP server ${config.name}: ${errorMessage}`);
+        throw new Error(`Failed to connect to MCP server ${name}: ${errorMessage}`);
       }
     });
 
@@ -117,9 +121,9 @@ export class McpRegistry {
       } catch {
         results.set(name, false);
         if (this.autoReconnect) {
-          const config = this.configs.find((c) => c.name === name);
-          if (config) {
-            this.scheduleReconnect(name, config);
+          const serverConfig = this.serverConfigs.find((s) => s.name === name);
+          if (serverConfig) {
+            this.scheduleReconnect(name, serverConfig.config);
           }
         }
       }

@@ -1,25 +1,22 @@
 import type { Static, TSchema } from "@sinclair/typebox";
 
-export interface McpServerConfigBase {
-  name: string;
-  enabled: boolean;
+export interface LocalMcpServerConfig {
+  type: "local";
+  command: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+  enabled?: boolean;
   toolPrefix?: string;
   filterPatterns?: string[];
 }
 
-export interface LocalMcpServerConfig extends McpServerConfigBase {
-  type: "local";
-  command: string;
-  args: string[];
-  env?: Record<string, string>;
-  cwd?: string;
-}
-
-export interface RemoteMcpServerConfig extends McpServerConfigBase {
+export interface RemoteMcpServerConfig {
   type: "remote";
   url: string;
-  transport: "sse" | "websocket";
   headers?: Record<string, string>;
+  enabled?: boolean;
+  toolPrefix?: string;
+  filterPatterns?: string[];
 }
 
 export type McpServerConfig = LocalMcpServerConfig | RemoteMcpServerConfig;
@@ -38,8 +35,5 @@ export interface McpToolResult {
 export type McpToolInput = Static<TSchema>;
 
 export interface McpConfig {
-  servers: McpServerConfig[];
-  autoReconnect?: boolean;
-  reconnectInterval?: number;
-  healthCheckInterval?: number;
+  [serverName: string]: McpServerConfig;
 }
