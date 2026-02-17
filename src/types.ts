@@ -17,6 +17,7 @@ export interface RemoteMcpServerConfig {
   enabled?: boolean;
   toolPrefix?: string;
   filterPatterns?: string[];
+  transport?: "sse" | "streamable-http" | "websocket";
 }
 
 export type McpServerConfig = LocalMcpServerConfig | RemoteMcpServerConfig;

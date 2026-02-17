@@ -17,7 +17,6 @@ export class McpClient {
     | null = null;
   private config: McpServerConfig;
   private connected: boolean = false;
-  private detectedTransport: TransportType | null = null;
 
   constructor(config: McpServerConfig) {
     this.config = config;
@@ -32,19 +31,72 @@ export class McpClient {
     try {
       if (this.config.type === "local") {
         this.transport = this.createStdioTransport();
-        this.detectedTransport = "stdio";
+        await this.client.connect(this.transport);
+        this.connected = true;
       } else {
-        const transportType = await this.getTransportType();
-        this.transport = this.createRemoteTransport(transportType);
-        this.detectedTransport = transportType;
+        await this.connectWithAutoDetect();
       }
-
-      await this.client.connect(this.transport);
-      this.connected = true;
     } catch (error) {
       this.transport = null;
       throw error;
     }
+  }
+
+  private async connectWithAutoDetect(): Promise<void> {
+    if (this.config.type !== "remote") {
+      throw new Error("Expected remote config");
+    }
+
+    const url = new URL(this.config.url);
+    const headers = this.config.headers ? { ...this.config.headers } : undefined;
+
+    if (url.protocol === "ws:" || url.protocol === "wss:") {
+      this.transport = new WebSocketClientTransport(url);
+      await this.client.connect(this.transport);
+      this.connected = true;
+      return;
+    }
+
+    if (url.pathname.toLowerCase().includes("websocket")) {
+      this.transport = new WebSocketClientTransport(url);
+      await this.client.connect(this.transport);
+      this.connected = true;
+      return;
+    }
+
+    const transports: Array<{ type: TransportType; create: () => any }> = [
+      {
+        type: "streamable-http",
+        create: () => new StreamableHTTPClientTransport(url, { requestInit: headers ? { headers } : undefined }),
+      },
+      {
+        type: "sse",
+        create: () => new SSEClientTransport(url, { requestInit: headers ? { headers } : undefined }),
+      },
+    ];
+
+    for (const { type, create } of transports) {
+      try {
+        const transport = create();
+        const connectPromise = this.client.connect(transport);
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Transport ${type} timeout`)), 2000),
+        );
+
+        await Promise.race([connectPromise, timeoutPromise]);
+
+        this.transport = transport;
+        this.connected = true;
+        return;
+      } catch (error: any) {
+        if (error.message?.includes("timeout")) {
+          console.log(`[MCP] Transport ${type} timeout, trying next...`);
+        }
+        await this.client.close().catch(() => {});
+      }
+    }
+
+    throw new Error("All transport types failed");
   }
 
   private createStdioTransport(): StdioClientTransport {
@@ -66,85 +118,6 @@ export class McpClient {
       cwd: this.config.cwd,
       stderr: "ignore",
     });
-  }
-
-  private async getTransportType(): Promise<TransportType> {
-    if (this.detectedTransport) {
-      return this.detectedTransport;
-    }
-
-    if (this.config.type !== "remote") {
-      throw new Error("Expected remote config for transport detection");
-    }
-
-    const url = new URL(this.config.url);
-    const transportType = await this.detectTransport(url);
-    this.detectedTransport = transportType;
-    return transportType;
-  }
-
-  private createRemoteTransport(transportType: TransportType) {
-    if (this.config.type !== "remote") {
-      throw new Error("Expected remote config for remote transport");
-    }
-
-    const url = new URL(this.config.url);
-    const headers = this.config.headers ? { ...this.config.headers } : undefined;
-
-    switch (transportType) {
-      case "websocket":
-        return new WebSocketClientTransport(url);
-      case "streamable-http":
-        return new StreamableHTTPClientTransport(url, { requestInit: headers ? { headers } : undefined });
-      case "sse":
-        return new SSEClientTransport(url, { requestInit: headers ? { headers } : undefined });
-      default:
-        throw new Error(`Unknown transport type: ${transportType}`);
-    }
-  }
-
-  private async detectTransport(url: URL): Promise<TransportType> {
-    if (url.protocol === "ws:" || url.protocol === "wss:") {
-      return "websocket";
-    }
-
-    if (url.pathname.toLowerCase().includes("websocket")) {
-      return "websocket";
-    }
-
-    try {
-      const probeUrl = new URL(url);
-      probeUrl.pathname = probeUrl.pathname.endsWith("/") ? probeUrl.pathname.slice(0, -1) : probeUrl.pathname;
-
-      const headers: Record<string, string> = {};
-      if (this.config.type === "remote" && this.config.headers) {
-        Object.assign(headers, this.config.headers);
-      }
-
-      const response = await fetch(probeUrl, {
-        method: "GET",
-        headers,
-        signal: AbortSignal.timeout(3000),
-      });
-
-      const mcpProtocolVersion = response.headers.get("mcp-protocol-version");
-      if (mcpProtocolVersion && mcpProtocolVersion.startsWith("2025-")) {
-        return "streamable-http";
-      }
-
-      const contentType = response.headers.get("content-type");
-      if (contentType?.includes("text/event-stream")) {
-        return "sse";
-      }
-
-      if (response.ok) {
-        return "streamable-http";
-      }
-
-      return "sse";
-    } catch {
-      return "sse";
-    }
   }
 
   async listTools(): Promise<any[]> {

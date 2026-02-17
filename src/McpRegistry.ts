@@ -21,13 +21,18 @@ export class McpRegistry {
   async initialize(): Promise<void> {
     const connectPromises = this.serverConfigs.map(async ({ name, config }) => {
       const client = new McpClient(config);
+
+      const connectPromise = client.connect();
+      const timeoutPromise = new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error(`Connection timeout (>10s)`)), 10000),
+      );
+
       try {
-        await client.connect();
+        await Promise.race([connectPromise, timeoutPromise]);
         this.clients.set(name, client);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
         console.error(`[MCP] Failed to connect to ${name}: ${errorMessage}`);
-        throw new Error(`Failed to connect to MCP server ${name}: ${errorMessage}`);
       }
     });
 
