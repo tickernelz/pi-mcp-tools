@@ -111,6 +111,7 @@ Each MCP server is a key under `"mcp"` with the following structure:
 | `/mcp-reconnect` | Reconnect all servers |
 | `/mcp-toggle <server>` | Toggle server on/off |
 | `/mcp-list` | List available tools |
+| `/mcp-tools` | Toggle tools per server (interactive UI) |
 
 **Flag:** `--mcp-debug` - Enable debug logging
 
@@ -187,6 +188,19 @@ Example: `mcp_web-search_search`, `ctx7_read_docs`
   }
 }
 ```
+
+### Disable Individual Tools
+
+Tools can be disabled via `/mcp-tools` command (interactive UI) or manually in settings:
+
+```json
+{
+  "mcp": { ... },
+  "mcpDisabledTools": ["mcp_context7_query-docs", "mcp_web-search_fetch_url"]
+}
+```
+
+Disabled tools are persisted globally in `~/.pi/agent/settings.json`.
 
 ## Development
 

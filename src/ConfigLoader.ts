@@ -1,11 +1,13 @@
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, writeFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import type { McpConfig, McpServerConfig, LocalMcpServerConfig, RemoteMcpServerConfig } from "./types.js";
 
+const SETTINGS_PATH = join(homedir(), ".pi", "agent", "settings.json");
+
 export class ConfigLoader {
   static loadFromSettingsJson(): McpConfig | null {
-    const globalSettingsPath = join(homedir(), ".pi", "agent", "settings.json");
+    const globalSettingsPath = SETTINGS_PATH;
     const projectSettingsPath = join(process.cwd(), ".pi", "settings.json");
 
     const projectConfig = this.loadFromFile(projectSettingsPath);
@@ -33,6 +35,37 @@ export class ConfigLoader {
     } catch {
       return null;
     }
+  }
+
+  static loadDisabledTools(): Set<string> {
+    if (!existsSync(SETTINGS_PATH)) {
+      return new Set();
+    }
+
+    try {
+      const content = readFileSync(SETTINGS_PATH, "utf-8");
+      const settings = JSON.parse(content);
+      const disabled = settings.mcpDisabledTools;
+      if (Array.isArray(disabled)) {
+        return new Set(disabled);
+      }
+      return new Set();
+    } catch {
+      return new Set();
+    }
+  }
+
+  static saveDisabledTools(disabledTools: Set<string>): void {
+    if (!existsSync(SETTINGS_PATH)) {
+      return;
+    }
+
+    try {
+      const content = readFileSync(SETTINGS_PATH, "utf-8");
+      const settings = JSON.parse(content);
+      settings.mcpDisabledTools = Array.from(disabledTools);
+      writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+    } catch {}
   }
 
   static validateConfig(config: McpConfig): { valid: boolean; errors: string[] } {

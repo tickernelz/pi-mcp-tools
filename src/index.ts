@@ -4,15 +4,21 @@ import { McpToolAdapter } from "./McpToolAdapter.js";
 import { ConfigLoader } from "./ConfigLoader.js";
 import type { McpConfig } from "./types.js";
 import { Type } from "@sinclair/typebox";
+import { getSettingsListTheme } from "@mariozechner/pi-coding-agent";
+import { Container, type SettingItem, SettingsList, Text } from "@mariozechner/pi-tui";
 
 let registry: McpRegistry | null = null;
 let mcpConfig: McpConfig | null = null;
 let enabledServers: Array<{ name: string; config: import("./types.js").McpServerConfig }> = [];
 let initError: string | null = null;
 let initStats: { servers: number; tools: number; failed: string[] } | null = null;
+const toolToServer = new Map<string, string>();
+const registeredTools = new Set<string>();
+let disabledTools = new Set<string>();
 
 export default async function (pi: ExtensionAPI) {
   mcpConfig = ConfigLoader.loadFromSettingsJson();
+  disabledTools = ConfigLoader.loadDisabledTools();
 
   if (!mcpConfig) {
     pi.on("session_start", async (_event, ctx) => {
@@ -77,6 +83,8 @@ export default async function (pi: ExtensionAPI) {
         for (const tool of tools) {
           const piTool = McpToolAdapter.convertToPiTool(tool, serverName, client, toolPrefix, filterPatterns);
           if (piTool) {
+            toolToServer.set(piTool.name, serverName);
+            registeredTools.add(piTool.name);
             pi.registerTool(piTool);
             totalTools++;
           }
@@ -88,6 +96,7 @@ export default async function (pi: ExtensionAPI) {
     }
 
     initStats = { servers: clients.size, tools: totalTools, failed: failedServers };
+    applyToolFilter(pi);
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     initError = errorMessage;
@@ -96,6 +105,7 @@ export default async function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     const connectedCount = registry?.getConnectedCount() ?? 0;
     const toolCount = initStats?.tools ?? 0;
+    const enabledCount = registeredTools.size - disabledTools.size;
 
     if (initError) {
       ctx.ui.setStatus("mcp", `Error: ${initError}`);
@@ -103,7 +113,10 @@ export default async function (pi: ExtensionAPI) {
         ctx.ui.notify(`MCP init failed: ${initError}`, "error");
       }
     } else {
-      ctx.ui.setStatus("mcp", `MCP: ${connectedCount}/${enabledServers.length} servers, ${toolCount} tools`);
+      ctx.ui.setStatus(
+        "mcp",
+        `MCP: ${connectedCount}/${enabledServers.length} servers, ${enabledCount}/${toolCount} tools`,
+      );
 
       if (isDebugEnabled() && initStats) {
         ctx.ui.notify(`MCP: ${initStats.servers} servers, ${initStats.tools} tools loaded`, "info");
@@ -232,6 +245,77 @@ export default async function (pi: ExtensionAPI) {
     },
   });
 
+  pi.registerCommand("mcp-tools", {
+    description: "Toggle MCP tools per server",
+    handler: async (_args, ctx) => {
+      if (registeredTools.size === 0) {
+        ctx.ui.notify("MCP: No tools registered", "warning");
+        return;
+      }
+
+      const toolsByServer = new Map<string, string[]>();
+      for (const toolName of registeredTools) {
+        const serverName = toolToServer.get(toolName) || "unknown";
+        if (!toolsByServer.has(serverName)) {
+          toolsByServer.set(serverName, []);
+        }
+        toolsByServer.get(serverName)!.push(toolName);
+      }
+
+      const items: SettingItem[] = [];
+      const sortedServers = Array.from(toolsByServer.keys()).sort();
+
+      for (const serverName of sortedServers) {
+        const tools = toolsByServer.get(serverName)!.sort();
+        for (const toolName of tools) {
+          items.push({
+            id: toolName,
+            label: `${serverName}: ${toolName}`,
+            currentValue: disabledTools.has(toolName) ? "disabled" : "enabled",
+            values: ["enabled", "disabled"],
+          });
+        }
+      }
+
+      await ctx.ui.custom((tui, theme, _kb, done) => {
+        const container = new Container();
+        container.addChild(new Text(theme.fg("accent", theme.bold("MCP Tools Configuration")), 1, 0));
+        container.addChild(new Text("", 0, 0));
+
+        const settingsList = new SettingsList(
+          items,
+          Math.min(items.length + 2, 20),
+          getSettingsListTheme(),
+          (id, newValue) => {
+            if (newValue === "enabled") {
+              disabledTools.delete(id);
+            } else {
+              disabledTools.add(id);
+            }
+            ConfigLoader.saveDisabledTools(disabledTools);
+            applyToolFilter(pi);
+          },
+          () => done(undefined),
+        );
+
+        container.addChild(settingsList);
+
+        return {
+          render(width: number) {
+            return container.render(width);
+          },
+          invalidate() {
+            container.invalidate();
+          },
+          handleInput(data: string) {
+            settingsList.handleInput?.(data);
+            tui.requestRender();
+          },
+        };
+      });
+    },
+  });
+
   pi.registerTool({
     name: "mcp_list_servers",
     label: "List MCP Servers",
@@ -249,4 +333,12 @@ export default async function (pi: ExtensionAPI) {
       return { content: [{ type: "text", text: JSON.stringify(servers, null, 2) }], details: { servers } };
     },
   });
+}
+
+function applyToolFilter(pi: ExtensionAPI) {
+  const allTools = pi.getAllTools();
+  const enabledToolNames = allTools
+    .map((t) => t.name)
+    .filter((name) => !name.startsWith("mcp_") || !disabledTools.has(name));
+  pi.setActiveTools(enabledToolNames);
 }
