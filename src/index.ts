@@ -96,13 +96,14 @@ export default async function (pi: ExtensionAPI) {
     }
 
     initStats = { servers: clients.size, tools: totalTools, failed: failedServers };
-    applyToolFilter(pi);
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     initError = errorMessage;
   }
 
   pi.on("session_start", async (_event, ctx) => {
+    applyToolFilter(pi);
+
     const connectedCount = registry?.getConnectedCount() ?? 0;
     const toolCount = initStats?.tools ?? 0;
     const enabledCount = registeredTools.size - disabledTools.size;
