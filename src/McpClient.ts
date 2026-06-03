@@ -117,6 +117,10 @@ export class McpClient {
     });
   }
 
+  getInstructions(): string | undefined {
+    return this.client.getInstructions();
+  }
+
   async listTools(): Promise<any[]> {
     if (!this.connected) {
       throw new Error("Client not connected");

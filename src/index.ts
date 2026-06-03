@@ -96,6 +96,21 @@ export default async function (pi: ExtensionAPI) {
     }
 
     initStats = { servers: clients.size, tools: totalTools, failed: failedServers };
+
+    const serverInstructions: string[] = [];
+    for (const [serverName, client] of clients) {
+      const instructions = client.getInstructions();
+      if (instructions) {
+        serverInstructions.push(`## ${serverName}\n${instructions}`);
+      }
+    }
+
+    if (serverInstructions.length > 0) {
+      const block = `# MCP Server Instructions\n\n${serverInstructions.join("\n\n")}`;
+      pi.on("before_agent_start", async (event) => {
+        return { systemPrompt: event.systemPrompt + "\n\n" + block };
+      });
+    }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     initError = errorMessage;
