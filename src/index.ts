@@ -1,11 +1,11 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { McpRegistry } from "./McpRegistry.js";
 import { McpToolAdapter } from "./McpToolAdapter.js";
 import { ConfigLoader } from "./ConfigLoader.js";
 import type { McpConfig } from "./types.js";
 import { Type } from "@sinclair/typebox";
-import { getSettingsListTheme } from "@mariozechner/pi-coding-agent";
-import { Container, type SettingItem, SettingsList, Text } from "@mariozechner/pi-tui";
+import { getSettingsListTheme } from "@earendil-works/pi-coding-agent";
+import { Container, type SettingItem, SettingsList, Text } from "@earendil-works/pi-tui";
 
 let registry: McpRegistry | null = null;
 let mcpConfig: McpConfig | null = null;
@@ -96,6 +96,21 @@ export default async function (pi: ExtensionAPI) {
     }
 
     initStats = { servers: clients.size, tools: totalTools, failed: failedServers };
+
+    const serverInstructions: string[] = [];
+    for (const [serverName, client] of clients) {
+      const instructions = client.getInstructions();
+      if (instructions) {
+        serverInstructions.push(`## ${serverName}\n${instructions}`);
+      }
+    }
+
+    if (serverInstructions.length > 0) {
+      const block = `# MCP Server Instructions\n\n${serverInstructions.join("\n\n")}`;
+      pi.on("before_agent_start", async (event) => {
+        return { systemPrompt: event.systemPrompt + "\n\n" + block };
+      });
+    }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     initError = errorMessage;
@@ -287,7 +302,7 @@ export default async function (pi: ExtensionAPI) {
           items,
           Math.min(items.length + 2, 20),
           getSettingsListTheme(),
-          (id, newValue) => {
+          (id: string, newValue: string) => {
             if (newValue === "enabled") {
               disabledTools.delete(id);
             } else {
