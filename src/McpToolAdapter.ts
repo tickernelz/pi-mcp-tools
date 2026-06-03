@@ -3,8 +3,8 @@ import type { McpClient } from "./McpClient.js";
 import type { McpTool } from "./types.js";
 import { SchemaConverter } from "./SchemaConverter.js";
 import { Type } from "@sinclair/typebox";
-import type { ExtensionContext, ToolDefinition } from "@mariozechner/pi-coding-agent";
-import type { TextContent, ImageContent } from "@mariozechner/pi-ai";
+import type { ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { TextContent, ImageContent } from "@earendil-works/pi-ai";
 
 interface McpCallResult {
   content?: Array<{ type: string; text?: string; data?: unknown }>;
