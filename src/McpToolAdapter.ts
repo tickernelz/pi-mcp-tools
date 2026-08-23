@@ -15,7 +15,7 @@ export class McpToolAdapter {
   static convertToPiTool<TDetails = Record<string, unknown>>(
     mcpTool: McpTool,
     serverName: string,
-    client: McpClient,
+    getClient: () => McpClient | undefined,
     toolPrefix?: string,
     filterPatterns?: string[],
   ): ToolDefinition<TSchema, TDetails> | null {
@@ -50,6 +50,15 @@ export class McpToolAdapter {
             return {
               content: [{ type: "text", text: "Tool call cancelled" } as TextContent],
               details: { cancelled: true } as TDetails,
+            };
+          }
+
+          const client = getClient();
+          if (!client) {
+            return {
+              content: [{ type: "text", text: `MCP server '${serverName}' is not connected` } as TextContent],
+              details: { error: true, server: serverName, tool: mcpTool.name } as TDetails,
+              isError: true,
             };
           }
 
