@@ -76,20 +76,24 @@ export class McpClient {
     ];
 
     for (const { type, create } of transports) {
+      let attemptTimer: NodeJS.Timeout | undefined;
       try {
         const transport = create();
         const connectPromise = this.client.connect(transport);
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`Transport ${type} timeout`)), 2000),
-        );
+        const timeoutPromise = new Promise<void>((_, reject) => {
+          attemptTimer = setTimeout(() => reject(new Error(`Transport ${type} timeout`)), 2000);
+          attemptTimer.unref();
+        });
 
         await Promise.race([connectPromise, timeoutPromise]);
 
         this.transport = transport;
         this.connected = true;
         return;
-      } catch (error: any) {
+      } catch {
         await this.client.close().catch(() => {});
+      } finally {
+        clearTimeout(attemptTimer);
       }
     }
 
