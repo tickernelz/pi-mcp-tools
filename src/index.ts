@@ -1,11 +1,11 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { McpRegistry } from "./McpRegistry.js";
 import { McpToolAdapter } from "./McpToolAdapter.js";
 import { ConfigLoader } from "./ConfigLoader.js";
 import type { McpConfig } from "./types.js";
 import { Type } from "@sinclair/typebox";
-import { getSettingsListTheme } from "@mariozechner/pi-coding-agent";
-import { Container, type SettingItem, SettingsList, Text } from "@mariozechner/pi-tui";
+import { getSettingsListTheme } from "@earendil-works/pi-coding-agent";
+import { Container, type SettingItem, SettingsList, Text } from "@earendil-works/pi-tui";
 
 let registry: McpRegistry | null = null;
 let mcpConfig: McpConfig | null = null;

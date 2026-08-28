@@ -39,7 +39,9 @@
     "@sinclair/typebox": "^0.34.0"
   },
   "devDependencies": {
-    "@mariozechner/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "^0.84.3",
+    "@earendil-works/pi-coding-agent": "^0.84.3",
+    "@earendil-works/pi-tui": "^0.84.3",
     "@types/node": "^22.0.0",
     "eslint": "^9.0.0",
     "husky": "^9.0.0",
