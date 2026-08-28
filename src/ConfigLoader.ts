@@ -3,24 +3,18 @@ import { join } from "path";
 import { homedir } from "os";
 import type { McpConfig, McpServerConfig, LocalMcpServerConfig, RemoteMcpServerConfig } from "./types.js";
 
-const SETTINGS_PATH = join(homedir(), ".pi", "agent", "settings.json");
+const GLOBAL_SETTINGS_PATH = join(homedir(), ".pi", "agent", "settings.json");
 
 export class ConfigLoader {
+  /** Load MCP config from user-global settings.json only.
+   *
+   * Project-local .pi/settings.json is deliberately NOT checked first:
+   * headless pi at default trust ignores project-local extensions (F20-F22),
+   * so preferring project config would silently load untrusted server config.
+   * User scope is the only safe default.
+   */
   static loadFromSettingsJson(): McpConfig | null {
-    const globalSettingsPath = SETTINGS_PATH;
-    const projectSettingsPath = join(process.cwd(), ".pi", "settings.json");
-
-    const projectConfig = this.loadFromFile(projectSettingsPath);
-    if (projectConfig) {
-      return projectConfig;
-    }
-
-    const globalConfig = this.loadFromFile(globalSettingsPath);
-    if (globalConfig) {
-      return globalConfig;
-    }
-
-    return null;
+    return this.loadFromFile(GLOBAL_SETTINGS_PATH);
   }
 
   static loadFromFile(path: string): McpConfig | null {
@@ -31,19 +25,19 @@ export class ConfigLoader {
     try {
       const content = readFileSync(path, "utf-8");
       const settings = JSON.parse(content);
-      return settings.mcp || null;
+      return settings.mcp ?? null;
     } catch {
       return null;
     }
   }
 
   static loadDisabledTools(): Set<string> {
-    if (!existsSync(SETTINGS_PATH)) {
+    if (!existsSync(GLOBAL_SETTINGS_PATH)) {
       return new Set();
     }
 
     try {
-      const content = readFileSync(SETTINGS_PATH, "utf-8");
+      const content = readFileSync(GLOBAL_SETTINGS_PATH, "utf-8");
       const settings = JSON.parse(content);
       const disabled = settings.mcpDisabledTools;
       if (Array.isArray(disabled)) {
@@ -56,17 +50,17 @@ export class ConfigLoader {
   }
 
   static saveDisabledTools(disabledTools: Set<string>): void {
-    if (!existsSync(SETTINGS_PATH)) {
+    if (!existsSync(GLOBAL_SETTINGS_PATH)) {
       return;
     }
 
     try {
-      const content = readFileSync(SETTINGS_PATH, "utf-8");
+      const content = readFileSync(GLOBAL_SETTINGS_PATH, "utf-8");
       const settings = JSON.parse(content);
       settings.mcpDisabledTools = Array.from(disabledTools);
-      writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+      writeFileSync(GLOBAL_SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n", "utf-8");
     } catch (error) {
-      console.error(`[pi-mcp-tools] Failed to save disabled tools to ${SETTINGS_PATH}:`, error);
+      console.error(`[pi-mcp-tools] Failed to save disabled tools to ${GLOBAL_SETTINGS_PATH}:`, error);
     }
   }
 
@@ -108,6 +102,6 @@ export class ConfigLoader {
   static getEnabledServers(config: McpConfig): Array<{ name: string; config: McpServerConfig }> {
     return Object.entries(config)
       .filter(([_, server]) => server.enabled !== false)
-      .map(([name, config]) => ({ name, config }));
+      .map(([name, cfg]) => ({ name, config: cfg }));
   }
 }

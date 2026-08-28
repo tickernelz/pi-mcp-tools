@@ -16,6 +16,17 @@ const toolToServer = new Map<string, string>();
 const registeredTools = new Set<string>();
 let disabledTools = new Set<string>();
 
+function clearModuleState(): void {
+  registry = null;
+  mcpConfig = null;
+  enabledServers = [];
+  initError = null;
+  initStats = null;
+  toolToServer.clear();
+  registeredTools.clear();
+  disabledTools.clear();
+}
+
 export default async function (pi: ExtensionAPI) {
   mcpConfig = ConfigLoader.loadFromSettingsJson();
   disabledTools = ConfigLoader.loadDisabledTools();
@@ -141,8 +152,8 @@ export default async function (pi: ExtensionAPI) {
   pi.on("session_shutdown", async () => {
     if (registry) {
       await registry.shutdown();
-      registry = null;
     }
+    clearModuleState();
   });
 
   pi.registerCommand("mcp-status", {
@@ -182,8 +193,8 @@ export default async function (pi: ExtensionAPI) {
       ctx.ui.setStatus("mcp", "Reconnecting...");
       try {
         await registry.shutdown();
-        const enabledServers = ConfigLoader.getEnabledServers(mcpConfig);
-        registry = new McpRegistry(enabledServers);
+        const servers = ConfigLoader.getEnabledServers(mcpConfig);
+        registry = new McpRegistry(servers);
         await registry.initialize();
         const connectedCount = registry.getConnectedCount();
         ctx.ui.setStatus("mcp", `MCP: ${connectedCount} servers`);
@@ -345,7 +356,7 @@ export default async function (pi: ExtensionAPI) {
   });
 }
 
-function applyToolFilter(pi: ExtensionAPI) {
+function applyToolFilter(pi: ExtensionAPI): void {
   const allTools = pi.getAllTools();
   const enabledToolNames = allTools
     .map((t) => t.name)

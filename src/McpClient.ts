@@ -50,14 +50,8 @@ export class McpClient {
     const url = new URL(this.config.url);
     const headers = this.config.headers ? { ...this.config.headers } : undefined;
 
-    if (url.protocol === "ws:" || url.protocol === "wss:") {
-      this.transport = new WebSocketClientTransport(url);
-      await this.client.connect(this.transport);
-      this.connected = true;
-      return;
-    }
-
-    if (url.pathname.toLowerCase().includes("websocket")) {
+    // Use explicit transport from config if specified
+    if (this.config.transport === "websocket" || url.protocol === "ws:" || url.protocol === "wss:") {
       this.transport = new WebSocketClientTransport(url);
       await this.client.connect(this.transport);
       this.connected = true;
@@ -77,9 +71,12 @@ export class McpClient {
 
     for (const { type, create } of transports) {
       let attemptTimer: NodeJS.Timeout | undefined;
+      // Each transport attempt needs its own Client instance because
+      // Client.close() makes the client unusable for further connections
+      const attemptClient = new Client({ name: "pi-mcp-extension", version: "1.0.0" });
       try {
         const transport = create();
-        const connectPromise = this.client.connect(transport);
+        const connectPromise = attemptClient.connect(transport);
         const timeoutPromise = new Promise<void>((_, reject) => {
           attemptTimer = setTimeout(() => reject(new Error(`Transport ${type} timeout`)), 2000);
           attemptTimer.unref();
@@ -87,11 +84,14 @@ export class McpClient {
 
         await Promise.race([connectPromise, timeoutPromise]);
 
+        // Swap in the successful client
+        await this.client.close().catch(() => {});
+        this.client = attemptClient;
         this.transport = transport;
         this.connected = true;
         return;
       } catch {
-        await this.client.close().catch(() => {});
+        await attemptClient.close().catch(() => {});
       } finally {
         clearTimeout(attemptTimer);
       }

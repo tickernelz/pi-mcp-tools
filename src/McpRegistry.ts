@@ -1,15 +1,18 @@
 import type { McpServerConfig } from "./types.js";
 import { McpClient } from "./McpClient.js";
 
+const MAX_RECONNECT_ATTEMPTS = 10;
+
 export class McpRegistry {
   private clients: Map<string, McpClient> = new Map();
-  private serverConfigs: Array<{ name: string; config: McpServerConfig }>;
+  private serverConfigs: ReadonlyArray<{ readonly name: string; readonly config: McpServerConfig }>;
   private reconnectTimers: Map<string, NodeJS.Timeout> = new Map();
+  private reconnectAttempts: Map<string, number> = new Map();
   private autoReconnect: boolean;
   private reconnectInterval: number;
 
   constructor(
-    serverConfigs: Array<{ name: string; config: McpServerConfig }>,
+    serverConfigs: ReadonlyArray<{ readonly name: string; readonly config: McpServerConfig }>,
     autoReconnect: boolean = true,
     reconnectInterval: number = 5000,
   ) {
@@ -33,7 +36,7 @@ export class McpRegistry {
         await Promise.race([connectPromise, timeoutPromise]);
         this.clients.set(name, client);
       } catch {
-        // Error will be captured in results, handled by caller
+        // Error captured by caller via getClients() missing this name
       } finally {
         clearTimeout(timeoutTimer);
       }
@@ -51,10 +54,13 @@ export class McpRegistry {
   }
 
   async shutdown(): Promise<void> {
-    this.reconnectTimers.forEach((timer) => clearTimeout(timer));
+    for (const timer of this.reconnectTimers.values()) {
+      clearTimeout(timer);
+    }
     this.reconnectTimers.clear();
+    this.reconnectAttempts.clear();
 
-    const disconnectPromises = Array.from(this.clients.entries()).map(async ([_, client]) => {
+    const disconnectPromises = Array.from(this.clients.values()).map(async (client) => {
       await client.disconnect().catch(() => {});
     });
 
@@ -77,8 +83,17 @@ export class McpRegistry {
     this.reconnectInterval = interval;
   }
 
-  scheduleReconnect(name: string, config: McpServerConfig): void {
+  private scheduleReconnect(name: string, config: McpServerConfig): void {
     if (!this.autoReconnect) {
+      return;
+    }
+
+    const attempts = this.reconnectAttempts.get(name) ?? 0;
+    if (attempts >= MAX_RECONNECT_ATTEMPTS) {
+      console.error(
+        `[pi-mcp-tools] Server '${name}': max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached, giving up`,
+      );
+      this.reconnectAttempts.delete(name);
       return;
     }
 
@@ -87,27 +102,38 @@ export class McpRegistry {
       clearTimeout(existingTimer);
     }
 
+    this.reconnectAttempts.set(name, attempts + 1);
+
     const timer = setTimeout(async () => {
+      this.reconnectTimers.delete(name);
+
+      // Disconnect the old client before creating a new one
+      const oldClient = this.clients.get(name);
+      if (oldClient) {
+        await oldClient.disconnect().catch(() => {});
+      }
+
       try {
         const client = new McpClient(config);
         await client.connect();
         this.clients.set(name, client);
-        this.reconnectTimers.delete(name);
+        this.reconnectAttempts.delete(name);
       } catch {
         this.scheduleReconnect(name, config);
       }
     }, this.reconnectInterval);
 
+    timer.unref();
     this.reconnectTimers.set(name, timer);
   }
 
   getConnectedCount(): number {
     let count = 0;
-    this.clients.forEach((client) => {
+    for (const client of this.clients.values()) {
       if (client.isConnected()) {
         count++;
       }
-    });
+    }
     return count;
   }
 
