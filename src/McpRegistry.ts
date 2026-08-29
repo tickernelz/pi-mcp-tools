@@ -23,15 +23,19 @@ export class McpRegistry {
       const client = new McpClient(config);
 
       const connectPromise = client.connect();
-      const timeoutPromise = new Promise<void>((_, reject) =>
-        setTimeout(() => reject(new Error(`Connection timeout (>10s)`)), 10000),
-      );
+      let timeoutTimer: NodeJS.Timeout | undefined;
+      const timeoutPromise = new Promise<void>((_, reject) => {
+        timeoutTimer = setTimeout(() => reject(new Error(`Connection timeout (>10s)`)), 10000);
+        timeoutTimer.unref();
+      });
 
       try {
         await Promise.race([connectPromise, timeoutPromise]);
         this.clients.set(name, client);
-      } catch (error) {
+      } catch {
         // Error will be captured in results, handled by caller
+      } finally {
+        clearTimeout(timeoutTimer);
       }
     });
 
