@@ -60,9 +60,11 @@ export default async function (pi: ExtensionAPI) {
 
   registry = new McpRegistry(enabledServers);
 
-  const initTimeout = new Promise<void>((_, reject) =>
-    setTimeout(() => reject(new Error("Connection timeout (>30s)")), 30000),
-  );
+  let initTimeoutTimer: NodeJS.Timeout | undefined;
+  const initTimeout = new Promise<void>((_, reject) => {
+    initTimeoutTimer = setTimeout(() => reject(new Error("Connection timeout (>30s)")), 30000);
+    initTimeoutTimer.unref();
+  });
 
   try {
     await Promise.race([registry.initialize(), initTimeout]);
@@ -81,7 +83,13 @@ export default async function (pi: ExtensionAPI) {
         const filterPatterns = serverConfig.config.filterPatterns;
 
         for (const tool of tools) {
-          const piTool = McpToolAdapter.convertToPiTool(tool, serverName, client, toolPrefix, filterPatterns);
+          const piTool = McpToolAdapter.convertToPiTool(
+            tool,
+            serverName,
+            () => registry?.getClient(serverName),
+            toolPrefix,
+            filterPatterns,
+          );
           if (piTool) {
             toolToServer.set(piTool.name, serverName);
             registeredTools.add(piTool.name);
@@ -99,6 +107,8 @@ export default async function (pi: ExtensionAPI) {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     initError = errorMessage;
+  } finally {
+    clearTimeout(initTimeoutTimer);
   }
 
   pi.on("session_start", async (_event, ctx) => {
@@ -144,17 +154,16 @@ export default async function (pi: ExtensionAPI) {
       }
       ctx.ui.setStatus("mcp", "Checking...");
       try {
-        const clients = registry.getClients();
+        const results = await registry.healthCheck();
         const status: string[] = [];
-        for (const [name, client] of clients) {
-          try {
-            await client.listTools();
-            status.push(`✓ ${name}`);
-          } catch {
-            status.push(`✗ ${name}`);
+        let healthyCount = 0;
+        for (const [name, healthy] of results) {
+          if (healthy) {
+            healthyCount++;
           }
+          status.push(healthy ? `✓ ${name}` : `✗ ${name}`);
         }
-        ctx.ui.setStatus("mcp", `Status: ${clients.size} servers`);
+        ctx.ui.setStatus("mcp", `Status: ${healthyCount}/${results.size} servers`);
         ctx.ui.notify(`MCP Status:\n${status.join("\n")}`, "info");
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";

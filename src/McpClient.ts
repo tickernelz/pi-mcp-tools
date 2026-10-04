@@ -3,9 +3,24 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { WebSocketClientTransport } from "@modelcontextprotocol/sdk/client/websocket.js";
+import { McpError } from "@modelcontextprotocol/sdk/types.js";
 import type { McpServerConfig } from "./types.js";
 
 type TransportType = "stdio" | "websocket" | "streamable-http" | "sse";
+
+// Default per-tool-call timeout. The MCP SDK's built-in default (60s) is too
+// aggressive for heavy tools (large index builds, long browser operations),
+// so we pass an explicit value. Override via PI_MCP_TOOL_TIMEOUT_MS (ms, 0 = disabled).
+const DEFAULT_TOOL_CALL_TIMEOUT_MS = 600_000;
+
+function resolveToolCallTimeoutMs(): number | undefined {
+  const raw = process.env.PI_MCP_TOOL_TIMEOUT_MS;
+  if (raw === undefined || raw.trim() === "") return DEFAULT_TOOL_CALL_TIMEOUT_MS;
+  const ms = Number(raw);
+  if (!Number.isFinite(ms) || ms < 0) return DEFAULT_TOOL_CALL_TIMEOUT_MS;
+  if (ms === 0) return undefined; // 0 = no timeout
+  return Math.floor(ms);
+}
 
 export class McpClient {
   private client: Client;
@@ -76,20 +91,24 @@ export class McpClient {
     ];
 
     for (const { type, create } of transports) {
+      let attemptTimer: NodeJS.Timeout | undefined;
       try {
         const transport = create();
         const connectPromise = this.client.connect(transport);
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`Transport ${type} timeout`)), 2000),
-        );
+        const timeoutPromise = new Promise<void>((_, reject) => {
+          attemptTimer = setTimeout(() => reject(new Error(`Transport ${type} timeout`)), 2000);
+          attemptTimer.unref();
+        });
 
         await Promise.race([connectPromise, timeoutPromise]);
 
         this.transport = transport;
         this.connected = true;
         return;
-      } catch (error: any) {
+      } catch {
         await this.client.close().catch(() => {});
+      } finally {
+        clearTimeout(attemptTimer);
       }
     }
 
@@ -131,7 +150,28 @@ export class McpClient {
       throw new Error("Client not connected");
     }
 
-    return await this.client.callTool({ name, arguments: args });
+    const timeoutMs = resolveToolCallTimeoutMs();
+    try {
+      return await this.client.callTool(
+        { name, arguments: args },
+        undefined,
+        timeoutMs !== undefined ? { timeout: timeoutMs, maxTotalTimeout: timeoutMs } : undefined,
+      );
+    } catch (err) {
+      // Surface SDK timeouts (code -32001) with actionable context so a stuck
+      // server errors out instead of hanging the agent loop forever.
+      if (
+        timeoutMs !== undefined &&
+        err instanceof McpError &&
+        (err.code === -32001 || /timed? ?out/i.test(err.message))
+      ) {
+        throw new Error(
+          `MCP tool "${name}" timed out after ${Math.round(timeoutMs / 1000)}s (server unresponsive). ` +
+            `If this tool legitimately needs longer, raise PI_MCP_TOOL_TIMEOUT_MS (ms).`,
+        );
+      }
+      throw err;
+    }
   }
 
   async disconnect(): Promise<void> {

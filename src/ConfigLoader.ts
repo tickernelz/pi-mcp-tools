@@ -65,7 +65,9 @@ export class ConfigLoader {
       const settings = JSON.parse(content);
       settings.mcpDisabledTools = Array.from(disabledTools);
       writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n", "utf-8");
-    } catch {}
+    } catch (error) {
+      console.error(`[pi-mcp-tools] Failed to save disabled tools to ${SETTINGS_PATH}:`, error);
+    }
   }
 
   static validateConfig(config: McpConfig): { valid: boolean; errors: string[] } {
